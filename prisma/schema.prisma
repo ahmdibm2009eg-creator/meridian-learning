@@ -1,0 +1,597 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Identity, organizations, tenancy
+// ─────────────────────────────────────────────────────────────
+
+model Organization {
+  id            String   @id @default(cuid())
+  name          String
+  slug          String   @unique
+  brandingColor String   @default("#0f766e")
+  aiTutorEnabled Boolean @default(true)
+  createdAt     DateTime @default(now())
+
+  users          User[]
+  courses        Course[]
+  taxonomyNodes  TaxonomyNode[]
+  questions      Question[]
+  passages       Passage[]
+  assessments    Assessment[]
+  vocabItems     VocabItem[]
+  announcements  Announcement[]
+  calendarEvents CalendarEvent[]
+  gradeEntries   GradeEntry[]
+}
+
+// role: SUPER_ADMIN | ORG_ADMIN | TEACHER | AUTHOR | STUDENT | PARENT (validated app-level)
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String
+  role          String   @default("STUDENT")
+  organizationId String?
+  locale        String   @default("en")
+  suspended     Boolean  @default(false)
+  guardianOfId  String?  // PARENT → student user id
+  prefs         String   @default("{}") // accessibility preferences JSON
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  organization    Organization?  @relation(fields: [organizationId], references: [id])
+  coursesAuthored Course[] @relation("CourseOwner")
+  sessions        Session[]
+  enrollments     Enrollment[]
+  attempts        Attempt[]
+  mistakes        MistakeEntry[]
+  skillStats      SkillStat[]
+  studyPlans      StudyPlan[]
+  studyTasks      StudyTask[]
+  vocabProgress   VocabProgress[]
+  notifications   Notification[]
+  tutorMessages   TutorMessage[]
+  authoredQuestions Question[] @relation("QuestionAuthor")
+  submissions     AssignmentSubmission[]
+  posts           DiscussionPost[]
+  practiceEvents  PracticeEvent[]
+  announcements   Announcement[] @relation("AnnouncementAuthor")
+  gradeEntriesReceived GradeEntry[] @relation("GradeEntryStudent")
+  auditLogs       AuditLog[]
+  gradesGiven     GradeEntry[] @relation("Grader")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────
+// Taxonomy: Program → Subject → Domain → Skill → Subskill (flexible tree)
+// ─────────────────────────────────────────────────────────────
+
+// level: PROGRAM | SUBJECT | DOMAIN | SKILL | SUBSKILL
+model TaxonomyNode {
+  id             String   @id @default(cuid())
+  organizationId String
+  parentId       String?
+  name           String
+  level          String
+  description    String   @default("")
+  position       Int      @default(0)
+
+  parent   TaxonomyNode?  @relation("Tree", fields: [parentId], references: [id])
+  children TaxonomyNode[] @relation("Tree")
+  questions Question[]
+  skillStats SkillStat[]
+  studyTasks StudyTask[]
+  mistakes  MistakeEntry[]
+  organization Organization @relation(fields: [organizationId], references: [id])
+
+  @@index([organizationId, parentId])
+}
+
+model Passage {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  text           String
+  source         String   @default("")
+  createdAt      DateTime @default(now())
+  organization Organization @relation(fields: [organizationId], references: [id])
+  questions      Question[]
+}
+
+// ─────────────────────────────────────────────────────────────
+// Question bank
+// ─────────────────────────────────────────────────────────────
+
+// type: MCQ_SINGLE | MCQ_MULTI | TRUE_FALSE | SHORT_ANSWER | NUMERIC | ESSAY | MATCHING | ORDERING | FILL_BLANK
+// reviewStatus: DRAFT | IN_REVIEW | APPROVED | REJECTED
+model Question {
+  id             String   @id @default(cuid())
+  organizationId String
+  type           String
+  stem           String
+  content        String   @default("{}") // type-specific rendering data JSON (no answer key)
+  answerKey      String   @default("{}") // type-specific key JSON — never sent to students pre-answer
+  explanation    String   @default("")
+  strategies     String   @default("{}") // {fastest, standard, beginner, alternative, shortcut} JSON
+  misconceptions String   @default("[]")
+  difficulty     Int      @default(3) // 1..5
+  estimatedSeconds Int    @default(90)
+  tags           String   @default("[]")
+  taxonomyNodeId String?
+  passageId      String?
+  authorId       String?
+  reviewStatus   String   @default("DRAFT")
+  version        Int      @default(1)
+  copyrightNote  String   @default("Original content")
+  points         Float    @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  taxonomy   TaxonomyNode?    @relation(fields: [taxonomyNodeId], references: [id])
+  passage    Passage?         @relation(fields: [passageId], references: [id])
+  author     User?            @relation("QuestionAuthor", fields: [authorId], references: [id])
+  revisions  QuestionRevision[]
+  assessmentItems AssessmentItem[]
+  answers    Answer[]
+  organization Organization @relation(fields: [organizationId], references: [id])
+  mistakes   MistakeEntry[]
+  practiceEvents PracticeEvent[]
+
+  @@index([organizationId, type])
+  @@index([taxonomyNodeId])
+}
+
+model QuestionRevision {
+  id         String   @id @default(cuid())
+  questionId String
+  snapshot   String   // full question JSON at revision time
+  note       String   @default("")
+  editedBy   String?
+  version    Int
+  createdAt  DateTime @default(now())
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────
+// Courses, lessons, enrollment
+// ─────────────────────────────────────────────────────────────
+
+// status: DRAFT | PUBLISHED | ARCHIVED   format: SELF_PACED | INSTRUCTOR_LED | BLENDED
+model Course {
+  id             String   @id @default(cuid())
+  organizationId String
+  title          String
+  description    String   @default("")
+  ownerId        String?
+  status         String   @default("PUBLISHED")
+  format         String   @default("SELF_PACED")
+  estimatedHours Float    @default(10)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  sections     CourseSection[]
+  enrollments  Enrollment[]
+  assessments  Assessment[]
+  assignments  Assignment[]
+  events       CalendarEvent[]
+  announcements Announcement[]
+  posts        DiscussionPost[]
+  gradeEntries GradeEntry[]
+  organization Organization @relation(fields: [organizationId], references: [id])
+  owner        User?        @relation("CourseOwner", fields: [ownerId], references: [id])
+}
+
+model CourseSection {
+  id       String @id @default(cuid())
+  courseId String
+  title    String
+  summary  String @default("")
+  position Int    @default(0)
+  course   Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons  Lesson[]
+}
+
+// type: READING | VIDEO | PRACTICE | INTERACTIVE
+model Lesson {
+  id          String @id @default(cuid())
+  sectionId   String
+  title       String
+  type        String @default("READING")
+  content     String @default("") // markdown
+  objectives  String @default("[]")
+  durationMin Int    @default(20)
+  position    Int    @default(0)
+  section     CourseSection @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  progress    LessonProgress[]
+}
+
+model Enrollment {
+  id         String   @id @default(cuid())
+  courseId   String
+  studentId  String
+  status     String   @default("ACTIVE") // ACTIVE | COMPLETED | WITHDRAWN
+  enrolledAt DateTime @default(now())
+  completedAt DateTime?
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  student    User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  lessonProgress LessonProgress[]
+
+  @@unique([courseId, studentId])
+}
+
+model LessonProgress {
+  id          String    @id @default(cuid())
+  lessonId    String
+  enrollmentId String
+  completed   Boolean   @default(false)
+  completedAt DateTime?
+  timeSpentMin Int      @default(0)
+  updatedAt   DateTime  @updatedAt
+
+  lesson     Lesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  enrollment Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  @@unique([lessonId, enrollmentId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Assignments
+// ─────────────────────────────────────────────────────────────
+
+model Assignment {
+  id           String   @id @default(cuid())
+  courseId     String
+  sectionId    String?
+  title        String
+  instructions String
+  dueAt        DateTime?
+  points       Float    @default(10)
+  allowText    Boolean  @default(true)
+  allowFile    Boolean  @default(false)
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  course       Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  submissions  AssignmentSubmission[]
+}
+
+// status: GRADED | SUBMITTED | RETURNED | DRAFT
+model AssignmentSubmission {
+  id             String    @id @default(cuid())
+  assignmentId   String
+  studentId      String
+  textSubmission String    @default("")
+  status         String    @default("SUBMITTED")
+  grade          Float?
+  feedback       String    @default("")
+  gradedBy       String?
+  gradedAt       DateTime?
+  submittedAt    DateTime  @default(now())
+  assignment     Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  student        User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, studentId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Assessments & attempts
+// ─────────────────────────────────────────────────────────────
+
+// type: QUIZ | EXAM | PRACTICE_SET | MOCK | DIAGNOSTIC
+// status: DRAFT | PUBLISHED | CLOSED
+// feedbackMode: AFTER_SUBMIT | AFTER_CLOSE | NEVER
+model Assessment {
+  id             String   @id @default(cuid())
+  organizationId String
+  courseId       String?
+  title          String
+  description    String   @default("")
+  type           String   @default("QUIZ")
+  status         String   @default("PUBLISHED")
+  timeLimitMin   Int?
+  attemptsAllowed Int     @default(2)
+  shuffleQuestions Boolean @default(false)
+  shuffleOptions  Boolean @default(false)
+  feedbackMode   String   @default("AFTER_SUBMIT")
+  passScorePct   Int      @default(60)
+  availableTo    DateTime?
+  createdBy      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  course  Course?          @relation(fields: [courseId], references: [id])
+  items   AssessmentItem[]
+  attempts Attempt[]
+}
+
+model AssessmentItem {
+  id            String  @id @default(cuid())
+  assessmentId  String
+  questionId    String
+  position      Int     @default(0)
+  points        Float?
+  assessment    Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  question      Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+// status: IN_PROGRESS | SUBMITTED | GRADED | ABANDONED
+model Attempt {
+  id           String    @id @default(cuid())
+  assessmentId String
+  studentId    String
+  startedAt    DateTime  @default(now())
+  submittedAt  DateTime?
+  status       String    @default("IN_PROGRESS")
+  score        Float?
+  maxScore     Float?
+  timeSpentSec Int       @default(0)
+  autosavedAt  DateTime?
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  student      User       @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  answers      Answer[]
+}
+
+model Answer {
+  id             String  @id @default(cuid())
+  attemptId      String
+  questionId     String
+  sequence       Int     @default(0)
+  response       String  @default("null") // type-specific response JSON
+  isCorrect      Boolean?
+  pointsAwarded  Float   @default(0)
+  flagged        Boolean @default(false)
+  eliminated     String  @default("[]") // option ids the student crossed out
+  timeSpentSec   Int     @default(0)
+  usedAiHelp     Boolean @default(false)
+  selfAssessment String? // ESSAY: CONFIDENT | UNCERTAIN
+  updatedAt      DateTime @updatedAt
+  attempt        Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question       Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────
+// Mistake log & mastery
+// ─────────────────────────────────────────────────────────────
+
+// category: INDEPENDENTLY_INCORRECT | AI_ASSISTED | CORRECT_UNCERTAIN | CORRECT_SLOW
+// errorType: CONCEPTUAL | PROCEDURAL | CARELESS | MISREAD | TIME | UNCATEGORIZED
+// status: OPEN | SCHEDULED | MASTERED
+model MistakeEntry {
+  id            String    @id @default(cuid())
+  studentId     String
+  questionId    String
+  category      String
+  errorType     String    @default("UNCATEGORIZED")
+  rootCause     String    @default("")
+  taxonomyNodeId String?
+  retryDueAt    DateTime?
+  reviewCount   Int       @default(0)
+  lastReviewedAt DateTime?
+  status        String    @default("OPEN")
+  createdAt     DateTime  @default(now())
+  student       User           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  question      Question       @relation(fields: [questionId], references: [id])
+  taxonomy      TaxonomyNode?  @relation(fields: [taxonomyNodeId], references: [id])
+}
+
+// Aggregated per-skill statistics for transparent mastery estimation
+model SkillStat {
+  id            String   @id @default(cuid())
+  studentId     String
+  taxonomyNodeId String
+  correct       Int      @default(0)
+  incorrect     Int      @default(0)
+  currentStreak Int      @default(0)
+  lastSeenAt    DateTime @default(now())
+  student       User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  taxonomy      TaxonomyNode  @relation(fields: [taxonomyNodeId], references: [id])
+
+  @@unique([studentId, taxonomyNodeId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Gradebook
+// ─────────────────────────────────────────────────────────────
+
+// itemType: ASSESSMENT | ASSIGNMENT | MANUAL | LESSON
+model GradeEntry {
+  id             String   @id @default(cuid())
+  organizationId String
+  courseId       String?
+  studentId      String
+  assessmentId   String?
+  assignmentId   String?
+  itemType       String
+  title          String
+  score          Float
+  maxScore       Float
+  weight         Float    @default(1)
+  category       String   @default("Coursework")
+  comment        String   @default("")
+  gradedBy       String?
+  gradedAt       DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  grader       User?        @relation("Grader", fields: [gradedBy], references: [id])
+  course       Course?      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  student      User         @relation("GradeEntryStudent", fields: [studentId], references: [id])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Study planner & vocabulary
+// ─────────────────────────────────────────────────────────────
+
+model StudyPlan {
+  id           String   @id @default(cuid())
+  studentId    String
+  goalExam     String   @default("SAT")
+  examDate     DateTime
+  targetScore  Int      @default(1200)
+  weeklyHours  Int      @default(8)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  student      User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  tasks        StudyTask[]
+}
+
+// type: PRACTICE | REVIEW | VOCAB | MOCK | LESSON | REST   status: PENDING | DONE | SKIPPED
+model StudyTask {
+  id            String   @id @default(cuid())
+  planId        String
+  studentId     String
+  dueDate       DateTime
+  title         String
+  description   String   @default("")
+  type          String
+  status        String   @default("PENDING")
+  reason        String   @default("")
+  taxonomyNodeId String?
+  estimatedMin  Int      @default(30)
+  completedAt   DateTime?
+  plan          StudyPlan     @relation(fields: [planId], references: [id], onDelete: Cascade)
+  student       User          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  taxonomy      TaxonomyNode? @relation(fields: [taxonomyNodeId], references: [id])
+}
+
+model VocabItem {
+  id             String  @id @default(cuid())
+  organizationId String
+  word           String
+  cefr           String  @default("B2")
+  partOfSpeech   String  @default("")
+  definition     String
+  arabicMeaning  String  @default("")
+  example        String  @default("")
+  synonyms       String  @default("[]")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  progress       VocabProgress[]
+}
+
+// status: UNKNOWN | UNCERTAIN | KNOWN
+model VocabProgress {
+  id            String   @id @default(cuid())
+  studentId     String
+  vocabItemId   String
+  status        String   @default("UNKNOWN")
+  box           Int      @default(1) // Leitner box 1..5
+  nextReviewAt  DateTime @default(now())
+  reviewCount   Int      @default(0)
+  streak        Int      @default(0)
+  student       User      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  vocabItem     VocabItem @relation(fields: [vocabItemId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, vocabItemId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// Communication & calendar
+// ─────────────────────────────────────────────────────────────
+
+model Announcement {
+  id             String   @id @default(cuid())
+  organizationId String
+  courseId       String?
+  authorId       String?
+  title          String
+  body           String
+  createdAt      DateTime @default(now())
+  course         Course?  @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  author         User?    @relation("AnnouncementAuthor", fields: [authorId], references: [id])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  view      String   @default("dashboard")
+  viewId    String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+// type: CLASS | EXAM | DEADLINE | OFFICE_HOUR
+model CalendarEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  courseId       String?
+  title          String
+  description    String   @default("")
+  startAt        DateTime
+  endAt          DateTime
+  type           String   @default("CLASS")
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  course         Course?      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+}
+
+model DiscussionPost {
+  id        String   @id @default(cuid())
+  courseId  String
+  authorId  String
+  parentId  String?
+  title     String   @default("")
+  body      String
+  createdAt DateTime @default(now())
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
+}
+
+// ─────────────────────────────────────────────────────────────
+// AI tutor & audit
+// ─────────────────────────────────────────────────────────────
+
+// role: user | assistant   mode: HINT | SOCRATIC | EXPLAIN | PLAN | VOCAB
+model TutorMessage {
+  id         String   @id @default(cuid())
+  studentId  String
+  questionId String?
+  role       String
+  mode       String   @default("EXPLAIN")
+  content    String
+  createdAt  DateTime @default(now())
+  student    User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  detail    String   @default("")
+  createdAt DateTime @default(now())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+// Individual graded practice outcomes (feeds accuracy trends & streaks)
+model PracticeEvent {
+  id             String   @id @default(cuid())
+  studentId      String
+  questionId     String
+  correct        Boolean
+  seconds        Int      @default(0)
+  usedAiHelp     Boolean  @default(false)
+  selfAssessment String?
+  createdAt      DateTime @default(now())
+
+  student User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([studentId, createdAt])
+}

@@ -1,0 +1,261 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: var(--font-stack);
+}
+
+/* ── Meridian design tokens ─────────────────────────────────
+   Warm paper + deep teal + amber. WCAG AA in light & dark;
+   AAA contrast in .hc high-contrast mode. */
+
+:root {
+  --radius: 0.75rem;
+
+  /* Light: warm paper */
+  --background: #faf7f2;
+  --foreground: #24211c;
+  --card: #fffdf9;
+  --card-foreground: #24211c;
+  --popover: #fffdf9;
+  --popover-foreground: #24211c;
+  --primary: #0b6b64;
+  --primary-foreground: #f4fdfb;
+  --secondary: #ede7dc;
+  --secondary-foreground: #33302a;
+  --muted: #efeae1;
+  --muted-foreground: #5d574d;
+  --accent: #fdf0dd;
+  --accent-foreground: #7c3e0a;
+  --destructive: #a4342a;
+  --destructive-foreground: #ffffff;
+  --success: #256b46;
+  --warning: #92500a;
+  --warning-foreground: #fffaf2;
+  --border: #ddd4c4;
+  --input: #ddd4c4;
+  --ring: #0b6b64;
+  --focus: #0b6b64;
+
+  --font-stack: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Noto Sans Arabic", sans-serif;
+  --font-dyslexia: Verdana, Tahoma, "DejaVu Sans", "Noto Sans Arabic", sans-serif;
+  --font-serif: Georgia, "Times New Roman", "Noto Serif", "Noto Naskh Arabic", serif;
+}
+
+.dark {
+  --background: #191713;
+  --foreground: #ece7dd;
+  --card: #211e19;
+  --card-foreground: #ece7dd;
+  --popover: #262219;
+  --popover-foreground: #ece7dd;
+  --primary: #8fd6cb;
+  --primary-foreground: #10201e;
+  --secondary: #322d24;
+  --secondary-foreground: #e5dfd3;
+  --muted: #2c2820;
+  --muted-foreground: #b3ab9c;
+  --accent: #4a3a1c;
+  --accent-foreground: #f5d9a8;
+  --destructive: #e8988c;
+  --destructive-foreground: #2a0f0b;
+  --success: #86c39a;
+  --warning: #e2b06a;
+  --warning-foreground: #2c1a05;
+  --border: #3d372c;
+  --input: #3d372c;
+  --ring: #8fd6cb;
+  --focus: #ffd166;
+}
+
+/* High contrast: near-AAA, thick borders, unmistakable focus */
+.hc {
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: #ffffff;
+  --card-foreground: #000000;
+  --popover: #ffffff;
+  --popover-foreground: #000000;
+  --primary: #00473f;
+  --primary-foreground: #ffffff;
+  --secondary: #f0f0f0;
+  --secondary-foreground: #000000;
+  --muted: #f5f5f5;
+  --muted-foreground: #1a1a1a;
+  --accent: #fff1c9;
+  --accent-foreground: #3b2500;
+  --destructive: #8f1414;
+  --destructive-foreground: #ffffff;
+  --success: #00420c;
+  --warning: #5c3b00;
+  --warning-foreground: #ffffff;
+  --border: #000000;
+  --input: #000000;
+  --ring: #00473f;
+  --focus: #b85c00;
+}
+
+/* ── Accessibility runtime variables (set by the preferences panel) ── */
+html {
+  font-size: calc(112.5% * var(--a11y-font-scale, 1)); /* 18px base */
+  --a11y-line-height: 1.7;
+  --a11y-letter-spacing: 0em;
+  --a11y-reading-width: 68ch;
+}
+html[data-font="dyslexia"] { --font-stack: var(--font-dyslexia); }
+html[data-font="serif"] { --font-stack: var(--font-serif); }
+
+body {
+  font-family: var(--font-stack);
+  line-height: var(--a11y-line-height);
+  letter-spacing: var(--a11y-letter-spacing);
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Comfortable reading measure for long-form content */
+.reading-measure { max-width: var(--a11y-reading-width); }
+html[data-width="narrow"] { --a11y-reading-width: 52ch; }
+html[data-width="comfortable"] { --a11y-reading-width: 68ch; }
+html[data-width="wide"] { --a11y-reading-width: 90ch; }
+html[data-width="full"] { --a11y-reading-width: 100%; }
+
+/* Visible focus everywhere — never rely on hover alone */
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+.hc :focus-visible { outline: 4px solid var(--focus); }
+
+/* Reduced motion: user preference or OS preference */
+html[data-motion="reduced"] *,
+html[data-motion="reduced"] *::before,
+html[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Links always underlined when requested */
+html[data-underline-links="on"] a { text-decoration: underline !important; }
+
+/* Simplified interface: hide decorative/secondary affordances */
+html[data-simplified="on"] [data-decorative] { display: none !important; }
+
+/* Focus mode: dim everything except the active working region */
+html[data-focus-mode="on"] body[data-focus-target] { opacity: 1; }
+html[data-focus-mode="on"] body:not([data-focus-mode-off]) > *:not(.app-shell) { opacity: 0.35; transition: opacity 0.2s; }
+html[data-focus-mode="on"] .focus-dim { opacity: 0.35; }
+
+/* Reading ruler */
+#reading-ruler {
+  position: fixed;
+  left: 0; right: 0;
+  height: 44px;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  border-top: 2px solid var(--primary);
+  border-bottom: 2px solid var(--primary);
+  pointer-events: none;
+  z-index: 60;
+  mix-blend-mode: normal;
+}
+
+/* Paragraph isolation while reading */
+html[data-para-isolation="on"] .prose p { transition: background 0.15s; padding: 2px 6px; margin-left: -6px; border-radius: 6px; }
+html[data-para-isolation="on"] .prose p:hover,
+html[data-para-isolation="on"] .prose p:focus {
+  background: color-mix(in srgb, var(--primary) 10%, transparent);
+}
+
+/* Reading progress bar */
+#reading-progress {
+  position: fixed;
+  top: 0; left: 0;
+  height: 4px;
+  background: var(--primary);
+  z-index: 70;
+  width: 0;
+}
+
+/* ── Content typography (markdown lessons & passages) ── */
+.prose-lms { color: var(--foreground); font-size: 1.111rem; line-height: var(--a11y-line-height); }
+.prose-lms h1 { font-size: 1.9rem; font-weight: 700; margin: 1.4em 0 0.5em; letter-spacing: -0.01em; }
+.prose-lms h2 { font-size: 1.45rem; font-weight: 700; margin: 1.3em 0 0.4em; }
+.prose-lms h3 { font-size: 1.2rem; font-weight: 600; margin: 1.1em 0 0.3em; }
+.prose-lms p { margin: 0.75em 0; }
+.prose-lms ul, .prose-lms ol { margin: 0.75em 0; padding-inline-start: 1.5em; }
+.prose-lms li { margin: 0.35em 0; }
+.prose-lms strong { font-weight: 700; }
+.prose-lms code {
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  background: var(--muted); padding: 0.1em 0.4em; border-radius: 6px; font-size: 0.95em;
+}
+.prose-lms blockquote { border-inline-start: 4px solid var(--primary); padding-inline-start: 1em; margin: 1em 0; color: var(--muted-foreground); }
+.prose-lms table { border-collapse: collapse; margin: 1em 0; width: 100%; }
+.prose-lms th, .prose-lms td { border: 1px solid var(--border); padding: 0.5em 0.75em; text-align: start; }
+.prose-lms th { background: var(--muted); font-weight: 600; }
+.mathspan {
+  font-family: Georgia, "Times New Roman", serif;
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  padding: 0 0.3em; border-radius: 4px; font-style: italic;
+  white-space: nowrap;
+}
+
+/* Status is never colour-alone: every badge carries an icon or word */
+.badge-dot { width: 0.5em; height: 0.5em; border-radius: 999px; display: inline-block; }
+
+/* Large, forgiving interactive targets */
+.target-lg { min-height: 44px; }
+
+/* Custom scrollbars for long lists */
+.scroll-list { max-height: 24rem; overflow-y: auto; }
+.scroll-list::-webkit-scrollbar { width: 10px; }
+.scroll-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
+.scroll-list::-webkit-scrollbar-thumb:hover { background: var(--muted-foreground); }
+
+/* Question card layout helpers */
+.option-row { border: 2px solid var(--border); }
+.option-row[aria-checked="true"] { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 8%, transparent); }
+.option-row.eliminated { opacity: 0.45; text-decoration: line-through; }
+
+/* Exam navigator cells */
+.nav-cell { min-width: 2.6rem; min-height: 2.6rem; }
+.nav-cell.answered { background: color-mix(in srgb, var(--primary) 16%, transparent); border-color: var(--primary); }
+.nav-cell.current { outline: 3px solid var(--focus); outline-offset: 1px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
