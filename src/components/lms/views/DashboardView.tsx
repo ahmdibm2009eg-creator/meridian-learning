@@ -83,7 +83,7 @@ function StudentDashboard() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <section className="rounded-2xl border border-border bg-card p-5 lg:col-span-2" aria-label={t("dash.accuracy")}>
+        <section className="min-w-0 rounded-2xl border border-border bg-card p-5 lg:col-span-2" aria-label={t("dash.accuracy")}>
           <h2 className="mb-3 text-lg font-bold">{t("dash.accuracy")}</h2>
           {trend.length >= 2 ? (
             <div className="h-56">
@@ -107,7 +107,7 @@ function StudentDashboard() {
           )}
         </section>
 
-        <section className="rounded-2xl border border-border bg-card p-5" aria-label={t("dash.readiness")}>
+        <section className="min-w-0 rounded-2xl border border-border bg-card p-5" aria-label={t("dash.readiness")}>
           <h2 className="mb-3 text-lg font-bold">{t("dash.readiness")}</h2>
           {data.readiness ? (
             <div>
@@ -123,7 +123,7 @@ function StudentDashboard() {
           )}
         </section>
 
-        <section className="rounded-2xl border border-border bg-card p-5" aria-label={t("dash.masteryFocus")}>
+        <section className="min-w-0 rounded-2xl border border-border bg-card p-5" aria-label={t("dash.masteryFocus")}>
           <h2 className="mb-4 text-lg font-bold">{t("dash.masteryFocus")}</h2>
           {weakest.length > 0 ? (
             <div className="space-y-4">
@@ -138,7 +138,7 @@ function StudentDashboard() {
           )}
         </section>
 
-        <section className="rounded-2xl border border-border bg-card p-5" aria-label={t("dash.myCourses")}>
+        <section className="min-w-0 rounded-2xl border border-border bg-card p-5" aria-label={t("dash.myCourses")}>
           <h2 className="mb-4 text-lg font-bold">{t("dash.myCourses")}</h2>
           {data.courses.length > 0 ? (
             <ul className="space-y-4">
@@ -159,7 +159,7 @@ function StudentDashboard() {
           )}
         </section>
 
-        <section className="rounded-2xl border border-border bg-card p-5" aria-label={t("dash.recentMistakes")}>
+        <section className="min-w-0 rounded-2xl border border-border bg-card p-5" aria-label={t("dash.recentMistakes")}>
           <h2 className="mb-3 text-lg font-bold">{t("dash.recentMistakes")}</h2>
           {data.recentMistakes.length > 0 ? (
             <ul className="space-y-2.5">

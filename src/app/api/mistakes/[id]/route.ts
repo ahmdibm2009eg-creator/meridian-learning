@@ -14,7 +14,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const body = await req.json().catch(() => null);
 
     const data: Record<string, unknown> = {};
-    if (typeof body?.errorType === "string") data.errorType = body.errorType;
+    if (
+      typeof body?.errorType === "string" &&
+      ["CONCEPTUAL", "PROCEDURAL", "CARELESS", "MISREAD", "TIME", "UNCATEGORIZED"].includes(body.errorType)
+    ) {
+      data.errorType = body.errorType;
+    }
     if (typeof body?.rootCause === "string") data.rootCause = body.rootCause.slice(0, 500);
 
     if (body?.action === "mastered") {

@@ -49,7 +49,7 @@ export type Capability =
   | "tutor.use";
 
 const CAPABILITIES: Record<Role, Capability[]> = {
-  SUPER_ADMIN: ["org.manage", "user.manage", "analytics.admin", "audit.view"],
+  SUPER_ADMIN: ["org.manage", "user.manage", "course.create", "course.edit.own", "analytics.admin", "audit.view", "tutor.use"],
   ORG_ADMIN: [
     "org.manage", "user.manage", "course.create", "question.create", "question.edit",
     "assessment.create", "assessment.grade", "analytics.teacher", "analytics.admin", "audit.view", "tutor.use",

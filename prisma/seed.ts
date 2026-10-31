@@ -37,6 +37,18 @@ async function main() {
     create: { name: "Cedar Institute", slug: "cedar", brandingColor: "#9a3412" },
   });
 
+  // ── Idempotency guard ──────────────────────────────────────
+  // The demo dataset is identified by the Northfield course catalog. When it
+  // already exists, re-seeding is a NO-OP: running the seed repeatedly must
+  // never duplicate organizations, courses, users, questions or history, and
+  // existing data is never deleted to "fix" seeding. Rebuild from scratch by
+  // deleting the database file and running `bun run db:push && bun prisma/seed.ts`.
+  const existingCourses = await db.course.count({ where: { organizationId: northfield.id } });
+  if (existingCourses > 0) {
+    console.log(`Demo dataset already present (${existingCourses} courses) — seeding skipped (idempotent no-op).`);
+    return;
+  }
+
   // ── Users ───────────────────────────────────────────────────
   const mkUser = (email: string, name: string, role: string, orgId: string, locale = "en") =>
     db.user.upsert({

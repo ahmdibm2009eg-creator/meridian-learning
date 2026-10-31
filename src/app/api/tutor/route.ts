@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { getUser } from "@/lib/auth";
 import { handle, json, fail } from "@/lib/api";
+import { rateLimit } from "@/lib/ratelimit";
 import { NextRequest } from "next/server";
 import ZAI from "z-ai-web-dev-sdk";
 
@@ -32,6 +33,19 @@ export async function POST(req: NextRequest) {
     const user = await getUser();
     if (!user) return fail("Authentication required", 401);
 
+    // Capability gate: the AI tutor costs real money — only roles with the
+    // tutor.use capability may call it.
+    if (![
+      "SUPER_ADMIN", "ORG_ADMIN", "TEACHER", "AUTHOR", "STUDENT",
+    ].includes(user.role)) {
+      return fail("You do not have permission to use the AI tutor", 403);
+    }
+    // Rate limit per user (bounds AI cost exposure).
+    const rl = rateLimit(`tutor:${user.id}`, 30, 5 * 60 * 1000);
+    if (!rl.ok) {
+      return fail("You are sending messages too quickly — wait a moment and try again.", 429);
+    }
+
     const org = user.organizationId
       ? await db.organization.findUnique({ where: { id: user.organizationId } })
       : null;
@@ -55,7 +69,9 @@ export async function POST(req: NextRequest) {
             : "";
         questionContext = `The student is working on this question:\n"""${q.stem}"""${options}\n(Question type: ${q.type})`;
 
-        // Exam-safe: never leak answers while an attempt containing this question is in progress.
+        // Exam-safe: never leak answers while an attempt containing this
+        // question is in progress, or for a pending graded assessment the
+        // student has not yet taken (pre-exam harvesting via the tutor).
         const attempt = await db.attempt.findFirst({
           where: { studentId: user.id, status: "IN_PROGRESS" },
           include: { assessment: { include: { items: true } } },
@@ -64,6 +80,34 @@ export async function POST(req: NextRequest) {
           activeExam = true;
           if (mode === "EXPLAIN") {
             return fail("Full explanations are disabled during assessments. Switch to hint or Socratic mode.", 403);
+          }
+        }
+        if (!activeExam) {
+          const gradedUsage = await db.assessmentItem.findFirst({
+            where: {
+              questionId: q.id,
+              assessment: {
+                status: { in: ["PUBLISHED", "CLOSED"] },
+                type: { in: ["EXAM", "MOCK", "QUIZ", "DIAGNOSTIC"] },
+                organizationId: q.organizationId,
+              },
+            },
+            select: { id: true },
+          });
+          if (gradedUsage) {
+            const prior = await db.answer.findFirst({
+              where: {
+                questionId: q.id,
+                attempt: { studentId: user.id, status: { in: ["SUBMITTED", "GRADED"] } },
+              },
+              select: { id: true },
+            });
+            if (!prior) {
+              activeExam = true;
+              if (mode === "EXPLAIN") {
+                return fail("Full explanations are disabled for questions in upcoming assessments. Switch to hint or Socratic mode.", 403);
+              }
+            }
           }
         }
       }

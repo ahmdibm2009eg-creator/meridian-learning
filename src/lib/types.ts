@@ -126,33 +126,48 @@ export interface Strategies {
 
 export type Locale = "en" | "ar";
 
-// Type-safe accessors for the QuestionResponse union
+// Type-safe accessors for the QuestionResponse union.
+// NOTE: these are fed client-supplied JSON, so every accessor validates the
+// field shape at runtime — a malformed payload must degrade to "unanswered",
+// never crash the server-side scoring engine.
 export function selectedIds(resp: QuestionResponse | null | undefined): string[] {
-  if (resp && (resp.type === "MCQ_SINGLE" || resp.type === "MCQ_MULTI")) return resp.selected;
+  if (resp && (resp.type === "MCQ_SINGLE" || resp.type === "MCQ_MULTI") && Array.isArray(resp.selected)) {
+    return resp.selected.filter((x): x is string => typeof x === "string");
+  }
   return [];
 }
 export function selectedBool(resp: QuestionResponse | null | undefined): boolean | null {
-  if (resp && resp.type === "TRUE_FALSE") return resp.selected;
+  if (resp && resp.type === "TRUE_FALSE" && typeof resp.selected === "boolean") return resp.selected;
   return null;
 }
 export function textOf(resp: QuestionResponse | null | undefined): string {
-  if (resp && (resp.type === "SHORT_ANSWER" || resp.type === "ESSAY")) return resp.text;
+  if (resp && (resp.type === "SHORT_ANSWER" || resp.type === "ESSAY") && typeof resp.text === "string") return resp.text;
   return "";
 }
 export function valueOf(resp: QuestionResponse | null | undefined): number | null {
-  if (resp && resp.type === "NUMERIC") return resp.value;
+  if (resp && resp.type === "NUMERIC" && typeof resp.value === "number" && Number.isFinite(resp.value)) return resp.value;
   return null;
 }
 export function mappingOf(resp: QuestionResponse | null | undefined): Record<string, string> {
-  if (resp && resp.type === "MATCHING") return resp.mapping;
+  if (resp && resp.type === "MATCHING" && resp.mapping && typeof resp.mapping === "object" && !Array.isArray(resp.mapping)) {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(resp.mapping)) if (typeof v === "string") out[k] = v;
+    return out;
+  }
   return {};
 }
 export function orderOf(resp: QuestionResponse | null | undefined): string[] {
-  if (resp && resp.type === "ORDERING") return resp.order;
+  if (resp && resp.type === "ORDERING" && Array.isArray(resp.order)) {
+    return resp.order.filter((x): x is string => typeof x === "string");
+  }
   return [];
 }
 export function valuesOf(resp: QuestionResponse | null | undefined): Record<string, string> {
-  if (resp && resp.type === "FILL_BLANK") return resp.values;
+  if (resp && resp.type === "FILL_BLANK" && resp.values && typeof resp.values === "object" && !Array.isArray(resp.values)) {
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(resp.values)) if (typeof v === "string") out[k] = v;
+    return out;
+  }
   return {};
 }
 

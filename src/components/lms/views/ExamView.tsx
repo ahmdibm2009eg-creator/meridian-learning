@@ -60,6 +60,10 @@ export function ExamView({ attemptId, onExit }: { attemptId: string; onExit: () 
   const questionStart = useRef(Date.now());
   const timers = useRef<Record<string, number>>({});
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Monotonic per-question revision counter: sent with every autosave so the
+  // server can reject stale writes (older rev) from a second tab or an
+  // in-flight debounced save racing a newer one.
+  const revs = useRef<Record<string, number>>({});
 
   const load = useCallback(() => {
     get<AttemptData>(`/api/attempts/${attemptId}`).then((d) => {
@@ -115,6 +119,7 @@ export function ExamView({ attemptId, onExit }: { attemptId: string; onExit: () 
       flagged: !!flags[q.id],
       eliminated: eliminated[q.id] ?? [],
       timeSpentSec: (timers.current[q.id] ?? 0) + Math.round((Date.now() - questionStart.current) / 1000),
+      rev: revs.current[q.id] ?? 0,
     }));
     setSaveState("saving");
     try {
@@ -183,16 +188,22 @@ export function ExamView({ attemptId, onExit }: { attemptId: string; onExit: () 
     }
   }
 
+  function bumpRev(id: string) {
+    revs.current[id] = (revs.current[id] ?? 0) + 1;
+  }
   function update(id: string, v: QuestionResponse | null) {
     dirty.current = true;
+    bumpRev(id);
     setResponses((r) => ({ ...r, [id]: v }));
   }
   function updateFlag(id: string, f: boolean) {
     dirty.current = true;
+    bumpRev(id);
     setFlags((fl) => ({ ...fl, [id]: f }));
   }
   function updateElim(id: string, ids: string[]) {
     dirty.current = true;
+    bumpRev(id);
     setEliminated((e) => ({ ...e, [id]: ids }));
   }
 

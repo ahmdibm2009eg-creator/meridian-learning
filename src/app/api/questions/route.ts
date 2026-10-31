@@ -29,17 +29,30 @@ export async function GET(req: NextRequest) {
     const q = sp.get("q")?.trim();
     if (q) where.stem = { contains: q };
 
-    const questions = await db.question.findMany({
-      where,
-      orderBy: { createdAt: "desc" },
-      take: 300,
-      include: {
-        taxonomy: { select: { id: true, name: true, level: true, parent: { select: { name: true } } } },
-        author: { select: { name: true } },
-        _count: { select: { answers: true, assessmentItems: true } },
-      },
-    });
+    // Pagination: page (1-based) + pageSize (default 50, max 100). The total
+    // count is returned so clients can offer "load more" without over-fetching.
+    const page = Math.max(1, parseInt(sp.get("page") ?? "1") || 1);
+    const pageSize = Math.min(100, Math.max(10, parseInt(sp.get("pageSize") ?? "50") || 50));
+
+    const [questions, total] = await Promise.all([
+      db.question.findMany({
+        where,
+        orderBy: { createdAt: "desc" },
+        skip: (page - 1) * pageSize,
+        take: pageSize,
+        include: {
+          taxonomy: { select: { id: true, name: true, level: true, parent: { select: { name: true } } } },
+          author: { select: { name: true } },
+          _count: { select: { answers: true, assessmentItems: true } },
+        },
+      }),
+      db.question.count({ where }),
+    ]);
     return json({
+      total,
+      page,
+      pageSize,
+      hasMore: page * pageSize < total,
       questions: questions.map((x) => ({
         id: x.id, type: x.type, stem: x.stem, difficulty: x.difficulty,
         estimatedSeconds: x.estimatedSeconds, points: x.points, reviewStatus: x.reviewStatus,
@@ -78,8 +91,26 @@ export async function POST(req: NextRequest) {
     }).safeParse(await req.json().catch(() => null));
     if (!parsed.success) return fail("Invalid question data: " + parsed.error.issues[0]?.message);
     const d = parsed.data;
-    if (d.type !== "ESSAY" && (d.answerKey === null || Object.keys(d.answerKey).length === 0)) {
+    // ESSAY and MATCHING keys are legitimately empty: essays are not
+    // auto-scorable, and MATCHING correctness derives from the content pairs.
+    if (d.type !== "ESSAY" && d.type !== "MATCHING" && (d.answerKey === null || Object.keys(d.answerKey).length === 0)) {
       return fail("This question type needs an answer key");
+    }
+    // Referenced taxonomy node / passage must belong to the caller's organization.
+    if (d.taxonomyNodeId) {
+      const node = await db.taxonomyNode.findUnique({ where: { id: d.taxonomyNodeId } });
+      if (!node || (user.role !== "SUPER_ADMIN" && node.organizationId !== user.organizationId)) {
+        return fail("Taxonomy node not found", 404);
+      }
+    }
+    if (d.passageId) {
+      const passage = await db.passage.findUnique({ where: { id: d.passageId } });
+      if (!passage || (user.role !== "SUPER_ADMIN" && passage.organizationId !== user.organizationId)) {
+        return fail("Passage not found", 404);
+      }
+    }
+    if (!user.organizationId && user.role !== "SUPER_ADMIN") {
+      return fail("Your account has no organization — ask an administrator to assign one", 400);
     }
     const question = await db.question.create({
       data: {

@@ -56,11 +56,13 @@ export function CoursesView() {
                   )}
                 </div>
                 <p className="mb-3 line-clamp-3 flex-1 text-muted-foreground">{c.description || "—"}</p>
-                <dl className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1"><Clock className="size-4" aria-hidden />{t("courses.estimated", { hours: c.estimatedHours })}</div>
-                  <div className="flex items-center gap-1"><BookOpen className="size-4" aria-hidden />{c.lessonCount} {t("courses.lessons")}</div>
-                  {c.ownerName && <div className="flex items-center gap-1"><Users className="size-4" aria-hidden />{c.ownerName}</div>}
-                </dl>
+                {/* Metadata chips are a plain list (a <dl> without dt/dd pairs
+                    is an invalid definition list). */}
+                <ul className="mb-3 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                  <li className="flex items-center gap-1"><Clock className="size-4" aria-hidden />{t("courses.estimated", { hours: c.estimatedHours })}</li>
+                  <li className="flex items-center gap-1"><BookOpen className="size-4" aria-hidden />{c.lessonCount} {t("courses.lessons")}</li>
+                  {c.ownerName && <li className="flex items-center gap-1"><Users className="size-4" aria-hidden />{c.ownerName}</li>}
+                </ul>
                 <div className="flex gap-2">
                   {c.enrolled || user?.role !== "STUDENT" ? (
                     <Button className="flex-1" size="lg" onClick={() => navigate("course", c.id)}>{t("courses.enter")}</Button>

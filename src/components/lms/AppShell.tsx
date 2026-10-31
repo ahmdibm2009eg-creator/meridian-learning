@@ -179,7 +179,9 @@ export function AppShell({ children, onRefresh }: { children: React.ReactNode; o
         {/* Main column */}
         <div className="flex min-h-screen min-w-0 flex-1 flex-col">
           <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur">
-            <div className="flex items-center gap-2 px-3 py-2 sm:px-5">
+            {/* flex-wrap: at 320px (400% zoom) the action buttons wrap to a
+                second row instead of forcing horizontal scrolling (WCAG 1.4.10). */}
+            <div className="flex flex-wrap items-center gap-2 px-3 py-2 sm:px-5">
               {/* Mobile nav */}
               <Sheet open={mobileNavOpen} onOpenChange={setMobileNavOpen}>
                 <SheetTrigger asChild>
@@ -252,10 +254,16 @@ export function AppShell({ children, onRefresh }: { children: React.ReactNode; o
                   )}
                 </div>
 
-                {/* Language */}
-                <Button variant="ghost" size="lg" onClick={toggleLocale} aria-label={`${t("common.language")}: ${locale === "en" ? t("common.arabic") : t("common.english")}`}>
+                {/* Language — the visible text is the target language name so it
+                    is contained in the accessible name (axe label-content-name). */}
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  onClick={toggleLocale}
+                  aria-label={`${t("common.language")}: ${locale === "en" ? t("common.arabic") : t("common.english")}`}
+                >
                   <Globe className="size-5" aria-hidden />
-                  <span className="text-sm font-semibold">{locale === "en" ? "ع" : "EN"}</span>
+                  <span className="text-sm font-semibold">{locale === "en" ? "العربية" : "English"}</span>
                 </Button>
 
                 {/* Accessibility */}

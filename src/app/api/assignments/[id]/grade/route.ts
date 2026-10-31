@@ -11,6 +11,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const assignment = await db.assignment.findUnique({ where: { id }, include: { course: true } });
     if (!assignment) return fail("Assignment not found", 404);
     const course = assignment.course;
+    // Tenant isolation: only the owning organization may grade this assignment.
+    if (user.role !== "SUPER_ADMIN" && course.organizationId !== user.organizationId) {
+      return fail("Assignment not found", 404);
+    }
     if (course.ownerId !== user.id && !["ORG_ADMIN", "SUPER_ADMIN"].includes(user.role)) {
       return fail("You do not have permission to grade this assignment", 403);
     }
@@ -25,25 +29,33 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     });
     if (!submission) return fail("No submission from this student yet", 404);
     const feedback = typeof body?.feedback === "string" ? body.feedback.slice(0, 4000) : "";
-    await db.assignmentSubmission.update({
-      where: { id: submission.id },
-      data: { grade, feedback, status: "GRADED", gradedBy: user.id, gradedAt: new Date() },
-    });
-    await db.gradeEntry.create({
-      data: {
-        organizationId: course.organizationId, courseId: course.id, studentId,
-        assignmentId: id, itemType: "ASSIGNMENT", title: assignment.title,
-        score: grade, maxScore: assignment.points, weight: 1, category: "Assignments",
-        gradedBy: user.id, comment: feedback,
-      },
-    });
-    await db.notification.create({
-      data: {
-        userId: studentId,
-        title: `Graded: ${assignment.title}`,
-        body: `You received ${grade}/${assignment.points}. ${feedback.slice(0, 100)}`,
-        view: "grades",
-      },
+
+    // Idempotent grading: the submission update and the gradebook entry are
+    // written atomically, and re-grading replaces (never duplicates) the entry.
+    await db.$transaction(async (tx) => {
+      await tx.assignmentSubmission.update({
+        where: { id: submission.id },
+        data: { grade, feedback, status: "GRADED", gradedBy: user.id, gradedAt: new Date() },
+      });
+      await tx.gradeEntry.deleteMany({
+        where: { assignmentId: id, studentId, itemType: "ASSIGNMENT" },
+      });
+      await tx.gradeEntry.create({
+        data: {
+          organizationId: course.organizationId, courseId: course.id, studentId,
+          assignmentId: id, itemType: "ASSIGNMENT", title: assignment.title,
+          score: grade, maxScore: assignment.points, weight: 1, category: "Assignments",
+          gradedBy: user.id, comment: feedback,
+        },
+      });
+      await tx.notification.create({
+        data: {
+          userId: studentId,
+          title: `Graded: ${assignment.title}`,
+          body: `You received ${grade}/${assignment.points}. ${feedback.slice(0, 100)}`,
+          view: "grades",
+        },
+      });
     });
     await audit(user.id, "assignment.grade", "assignmentSubmission", submission.id, `${grade}/${assignment.points}`);
     return json({ ok: true });

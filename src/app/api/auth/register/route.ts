@@ -8,7 +8,9 @@ const schema = z.object({
   name: z.string().min(1).max(120),
   email: z.string().email(),
   password: z.string().min(8),
-  role: z.enum(["STUDENT", "TEACHER"]).default("STUDENT"),
+  // Accepted for backward compatibility but IGNORED: public registration is
+  // STUDENT-only, staff roles are provisioned by administrators.
+  role: z.string().optional(),
   organizationCode: z.string().optional(),
 });
 
@@ -17,7 +19,8 @@ export async function POST(req: NextRequest) {
     const body = await req.json().catch(() => null);
     const parsed = schema.safeParse(body);
     if (!parsed.success) return fail("Please check your details — password must be at least 8 characters");
-    const { name, email, password, role, organizationCode } = parsed.data;
+    const { name, email, password, organizationCode } = parsed.data;
+    const role = "STUDENT"; // never trust a client-supplied role
 
     const existing = await db.user.findUnique({ where: { email: email.toLowerCase() } });
     if (existing) return fail("An account with this email already exists", 409);

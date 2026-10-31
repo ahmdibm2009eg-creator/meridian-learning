@@ -35,25 +35,38 @@ export function QuestionBankView() {
   const [nodes, setNodes] = useState<TaxonomyNode[]>([]);
   const [error, setError] = useState("");
   const [filters, setFilters] = useState({ q: "", type: "all", status: "all", skill: "all" });
+  const [page, setPage] = useState(1);
+  const [total, setTotal] = useState<number | null>(null);
   const [editing, setEditing] = useState<QuestionRow | "new" | null>(null);
   const [preview, setPreview] = useState<QuestionRow | null>(null);
   const [importOpen, setImportOpen] = useState(false);
 
-  const load = useCallback(() => {
+  // Paginated load: filter changes reset to page 1; "Load more" appends.
+  const load = useCallback((nextPage: number, append: boolean) => {
     const sp = new URLSearchParams();
     if (filters.type !== "all") sp.set("type", filters.type);
     if (filters.status !== "all") sp.set("status", filters.status);
     if (filters.skill !== "all") sp.set("skill", filters.skill);
     if (filters.q.trim()) sp.set("q", filters.q.trim());
-    get<{ questions: QuestionRow[] }>(`/api/questions?${sp}`).then((d) => setRows(d.questions)).catch((e) => setError(e.message));
+    sp.set("page", String(nextPage));
+    sp.set("pageSize", "50");
+    get<{ questions: QuestionRow[]; total: number; hasMore: boolean }>(`/api/questions?${sp}`)
+      .then((d) => {
+        setTotal(d.total);
+        setRows((prev) => (append && prev ? [...prev, ...d.questions] : d.questions));
+        setPage(nextPage);
+      })
+      .catch((e) => setError(e.message));
   }, [filters]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(1, false); }, [load]);
   useEffect(() => { get<{ nodes: TaxonomyNode[] }>("/api/taxonomy").then((d) => setNodes(d.nodes)).catch(() => {}); }, []);
+
+  const hasMore = total === null ? false : rows ? rows.length < total : false;
 
   const skills = useMemo(() => nodes.filter((n) => n.level === "SKILL" || n.level === "SUBSKILL"), [nodes]);
 
-  if (error) return <ErrorNotice message={error} onRetry={load} />;
+  if (error) return <ErrorNotice message={error} onRetry={() => load(1, false)} />;
   if (!rows) return <Loader />;
 
   async function remove(row: QuestionRow) {
@@ -61,7 +74,7 @@ export function QuestionBankView() {
     try {
       await del(`/api/questions/${row.id}`);
       toast({ title: t("common.saved") });
-      load();
+      load(1, false);
     } catch (e) {
       toast({ title: e instanceof Error ? e.message : t("common.error"), variant: "destructive" });
     }
@@ -69,7 +82,7 @@ export function QuestionBankView() {
 
   async function approve(row: QuestionRow) {
     await patch(`/api/questions/${row.id}`, { reviewStatus: "APPROVED" }).catch(() => {});
-    load();
+    load(page, false);
   }
 
   return (
@@ -130,7 +143,9 @@ export function QuestionBankView() {
         <Button variant="ghost" onClick={() => setFilters({ q: "", type: "all", status: "all", skill: "all" })}>{t("common.clearFilters")}</Button>
       </section>
 
-      <p className="mb-3 text-sm text-muted-foreground" role="status">{rows.length} {t("common.results")}</p>
+      <p className="mb-3 text-sm text-muted-foreground" role="status">
+        {rows.length}{total !== null && total > rows.length ? ` / ${total}` : ""} {t("common.results")}
+      </p>
 
       {rows.length === 0 ? (
         <EmptyState title={t("practice.noQuestions")} icon={<Database className="size-8 text-muted-foreground" aria-hidden />}
@@ -180,12 +195,20 @@ export function QuestionBankView() {
         </ul>
       )}
 
+      {hasMore && (
+        <div className="mt-4 flex justify-center">
+          <Button variant="outline" size="lg" onClick={() => load(page + 1, true)}>
+            {t("common.loadMore")} ({rows.length}/{total})
+          </Button>
+        </div>
+      )}
+
       {editing && (
         <QuestionEditorDialog
           question={editing === "new" ? null : editing}
           skills={skills}
           onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); load(); }}
+          onSaved={() => { setEditing(null); load(page, false); }}
         />
       )}
 
@@ -205,7 +228,7 @@ export function QuestionBankView() {
         </Dialog>
       )}
 
-      {importOpen && <ImportDialog onClose={() => setImportOpen(false)} onImported={() => { setImportOpen(false); load(); }} />}
+      {importOpen && <ImportDialog onClose={() => setImportOpen(false)} onImported={() => { setImportOpen(false); load(1, false); }} />}
     </div>
   );
 }

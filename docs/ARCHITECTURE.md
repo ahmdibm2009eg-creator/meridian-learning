@@ -19,24 +19,30 @@ used only as publicly documented functional benchmarks.
 
 ```
 src/lib/           domain services (no React)
-  auth.ts          scrypt password hashing, cookie sessions
+  auth.ts          scrypt password hashing, cookie sessions (Secure in prod, revocable)
   api.ts           capability-based RBAC, tenant guards, audit helper
+  ratelimit.ts     fixed-window in-memory limiter (login, AI tutor)
   scoring.ts       per-type answer validation + scoring (server-side only)
   mastery.ts       Beta-posterior skill mastery with 90% intervals
   srs.ts           Leitner spaced repetition (vocab + mistake retries)
   mistakes.ts      outcome → skill stats + mistake log policy
   planner.ts       explainable study-plan generator
   i18n.ts          EN/AR dictionaries, RTL awareness
-  types.ts         shared domain types + response accessors
+  types.ts         shared domain types + runtime-defensive response accessors
+src/proxy.ts       Next 16 proxy (ex-middleware): same-origin enforcement + security headers
 
-src/app/api/       30+ route handlers (see API surface below)
+src/app/api/       44 route handlers (see API surface below)
 src/components/lms/
   AppRoot.tsx      session bootstrap, hash router, a11y side effects
   AppShell.tsx     role-based navigation, notifications, language, a11y panel
   QuestionRenderer.tsx  renders all 9 question types in exam/practice/review modes
   AccessibilityPanel.tsx  every preference, applied live
   views/*          20 role-aware views
-prisma/seed.ts     original demo dataset (63 questions, 2 orgs, 10 users)
+prisma/            schema + migrations (baseline + additive) + demo seed (idempotent)
+tests/             unit (Vitest) · integration (Vitest + prod server + isolated DB)
+                   e2e (Playwright) · a11y (axe-core scans) · fixtures (fixed ids)
+scripts/           test-server orchestration, benchmarks, db tooling
+.github/            CI: lint → typecheck → unit → integration → e2e/a11y → build
 ```
 
 ## API surface (selected)

@@ -85,14 +85,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (!user) return fail("Authentication required", 401);
     const course = await db.course.findUnique({ where: { id } });
     if (!course) return fail("Course not found", 404);
+    // Tenant isolation: ORG_ADMIN may only edit courses in their own organization.
+    if (user.role !== "SUPER_ADMIN" && course.organizationId !== user.organizationId) {
+      return fail("Course not found", 404);
+    }
     const isTeacher = course.ownerId === user.id || ["ORG_ADMIN", "SUPER_ADMIN"].includes(user.role);
     if (!isTeacher) return fail("You do not have permission to edit this course", 403);
     const body = await req.json().catch(() => null);
-    const data: Record<string, string> = {};
-    for (const k of ["title", "description", "status", "format"] as const) {
-      if (typeof body?.[k] === "string") data[k] = body[k];
+    const data: Record<string, unknown> = {};
+    for (const k of ["title", "description"] as const) {
+      if (typeof body?.[k] === "string") data[k] = body[k].slice(0, k === "title" ? 200 : 2000);
     }
-    if (typeof body?.estimatedHours === "number") data.estimatedHours = String(body.estimatedHours);
+    if (typeof body?.status === "string" && ["DRAFT", "PUBLISHED", "ARCHIVED"].includes(body.status)) data.status = body.status;
+    if (typeof body?.format === "string" && ["SELF_PACED", "INSTRUCTOR_LED", "BLENDED"].includes(body.format)) data.format = body.format;
+    if (typeof body?.estimatedHours === "number" && Number.isFinite(body.estimatedHours)) {
+      data.estimatedHours = Math.min(1000, Math.max(0, body.estimatedHours));
+    }
     const updated = await db.course.update({ where: { id }, data });
     await audit(user.id, "course.update", "course", id, JSON.stringify(data).slice(0, 200));
     return json({ course: updated });

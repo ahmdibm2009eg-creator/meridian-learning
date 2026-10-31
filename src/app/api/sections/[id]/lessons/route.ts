@@ -12,6 +12,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const section = await db.courseSection.findUnique({ where: { id }, include: { course: true } });
     if (!section) return fail("Section not found", 404);
     const course = section.course;
+    // Tenant isolation: sections of another organization are not writable.
+    if (user.role !== "SUPER_ADMIN" && course.organizationId !== user.organizationId) {
+      return fail("Section not found", 404);
+    }
     if (course.ownerId !== user.id && !["ORG_ADMIN", "SUPER_ADMIN"].includes(user.role)) {
       return fail("You do not have permission to edit this course", 403);
     }

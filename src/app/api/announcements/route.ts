@@ -9,7 +9,7 @@ export async function GET() {
     const user = await getUser();
     if (!user) return fail("Authentication required", 401);
     const announcements = await db.announcement.findMany({
-      where: { organizationId: user.organizationId ?? "" },
+      where: user.role === "SUPER_ADMIN" ? {} : { organizationId: user.organizationId ?? "__none__" },
       orderBy: { createdAt: "desc" },
       take: 30,
       include: { author: { select: { name: true } } },
@@ -29,9 +29,22 @@ export async function POST(req: NextRequest) {
       courseId: z.string().nullable().default(null),
     }).safeParse(await req.json().catch(() => null));
     if (!parsed.success) return fail("Title and message are required");
+
+    // Tenant isolation: a course-scoped announcement must target a course in
+    // the caller's organization (previously cross-org notification fanout).
+    let organizationId = user.organizationId;
+    if (parsed.data.courseId) {
+      const course = await db.course.findUnique({ where: { id: parsed.data.courseId } });
+      if (!course || (user.role !== "SUPER_ADMIN" && course.organizationId !== user.organizationId)) {
+        return fail("Course not found", 404);
+      }
+      organizationId = course.organizationId;
+    }
+    if (!organizationId) return fail("Announcements require an organization context", 400);
+
     const announcement = await db.announcement.create({
       data: {
-        organizationId: user.organizationId ?? "none",
+        organizationId,
         courseId: parsed.data.courseId,
         authorId: user.id,
         title: parsed.data.title,

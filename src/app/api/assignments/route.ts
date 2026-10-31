@@ -18,6 +18,10 @@ export async function POST(req: NextRequest) {
     if (!parsed.success) return fail("Assignment title must be at least 3 characters");
     const course = await db.course.findUnique({ where: { id: parsed.data.courseId } });
     if (!course) return fail("Course not found", 404);
+    // Tenant isolation: assignments can only be created in your own organization's courses.
+    if (user.role !== "SUPER_ADMIN" && course.organizationId !== user.organizationId) {
+      return fail("Course not found", 404);
+    }
     if (course.ownerId !== user.id && !["ORG_ADMIN", "SUPER_ADMIN"].includes(user.role)) {
       return fail("You do not have permission to add assignments", 403);
     }

@@ -11,6 +11,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (!user) return fail("Authentication required", 401);
     const course = await db.course.findUnique({ where: { id } });
     if (!course) return fail("Course not found", 404);
+    // Tenant isolation: cross-organization course ids are rejected.
+    if (user.role !== "SUPER_ADMIN" && course.organizationId !== user.organizationId) {
+      return fail("Course not found", 404);
+    }
     if (course.ownerId !== user.id && !["ORG_ADMIN", "SUPER_ADMIN"].includes(user.role)) {
       return fail("You do not have permission to edit this course", 403);
     }

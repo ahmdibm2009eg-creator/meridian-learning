@@ -4,6 +4,8 @@ import { handle, json, fail, audit } from "@/lib/api";
 import { NextRequest } from "next/server";
 
 // POST = start (or resume) an attempt for the current student.
+// Start is transactional so a concurrent double-click cannot consume two of
+// the allowed attempts, and course-tied assessments require enrollment.
 export async function POST(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   return handle(async () => {
     const { id } = await params;
@@ -19,28 +21,43 @@ export async function POST(_req: NextRequest, { params }: { params: Promise<{ id
     if (a.items.length === 0) return fail("This assessment has no questions yet", 409);
     if (a.availableTo && a.availableTo < new Date()) return fail("This assessment is no longer available", 403);
 
-    // Resume an in-progress attempt instead of consuming a new one.
-    const inProgress = await db.attempt.findFirst({
-      where: { assessmentId: id, studentId: user.id, status: "IN_PROGRESS" },
-    });
-    if (inProgress) {
-      return json({ attemptId: inProgress.id, resumed: true });
+    // Course-tied assessments require an active enrollment.
+    if (a.courseId) {
+      const enrollment = await db.enrollment.findUnique({
+        where: { courseId_studentId: { courseId: a.courseId, studentId: user.id } },
+      });
+      if (!enrollment || enrollment.status === "WITHDRAWN") {
+        return fail("Enroll in the course before taking this assessment", 403);
+      }
     }
 
-    const used = await db.attempt.count({
-      where: { assessmentId: id, studentId: user.id, status: { in: ["SUBMITTED", "GRADED"] } },
-    });
-    if (used >= a.attemptsAllowed) return fail("You have used all attempts for this assessment", 409);
+    // Atomic start: resume-check, limit re-check and creation all happen inside
+    // one transaction — SQLite serializes writers, so two concurrent requests
+    // cannot both observe "no in-progress attempt" and consume two slots.
+    const result = await db.$transaction(async (tx) => {
+      const inProgress = await tx.attempt.findFirst({
+        where: { assessmentId: id, studentId: user.id, status: "IN_PROGRESS" },
+      });
+      if (inProgress) return { attemptId: inProgress.id, resumed: true };
 
-    const attempt = await db.attempt.create({ data: { assessmentId: id, studentId: user.id } });
-    // Create empty answer rows up-front (doubles as the navigator order).
-    await db.answer.createMany({
-      data: a.items.map((it, i) => ({
-        attemptId: attempt.id, questionId: it.questionId, sequence: i,
-        pointsAwarded: 0,
-      })),
+      const usedNow = await tx.attempt.count({
+        where: { assessmentId: id, studentId: user.id, status: { in: ["SUBMITTED", "GRADED"] } },
+      });
+      if (usedNow >= a.attemptsAllowed) return null;
+
+      const created = await tx.attempt.create({ data: { assessmentId: id, studentId: user.id } });
+      // Create empty answer rows up-front (doubles as the navigator order).
+      await tx.answer.createMany({
+        data: a.items.map((it, i) => ({
+          attemptId: created.id, questionId: it.questionId, sequence: i,
+          pointsAwarded: 0,
+        })),
+      });
+      return { attemptId: created.id, resumed: false };
     });
-    await audit(user.id, "attempt.start", "attempt", attempt.id);
-    return json({ attemptId: attempt.id, resumed: false });
+    if (!result) return fail("You have used all attempts for this assessment", 409);
+
+    if (!result.resumed) await audit(user.id, "attempt.start", "attempt", result.attemptId);
+    return json(result);
   });
 }

@@ -36,7 +36,7 @@ export async function recordOutcome(opts: {
   let category: MistakeCategory | null = opts.category ?? null;
   if (!category) {
     if (opts.usedAiHelp && opts.correct) category = "AI_ASSISTED";
-    else if (opts.selfAssessment === "UNCERTAIN" && opts.correct) category = "CORRECT_UNCERTAIN";
+    else if (opts.selfAssessment === "UNCERTAIN") category = "CORRECT_UNCERTAIN"; // essay self-assessment: unsure, not wrong
     else if (opts.correct && opts.secondsSpent > (q?.estimatedSeconds ?? 90) * 1.8) category = "CORRECT_SLOW";
     else if (!opts.correct) category = "INDEPENDENTLY_INCORRECT";
   }

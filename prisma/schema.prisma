@@ -75,6 +75,8 @@ model Session {
   expiresAt DateTime
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -358,6 +360,7 @@ model Answer {
   timeSpentSec   Int     @default(0)
   usedAiHelp     Boolean @default(false)
   selfAssessment String? // ESSAY: CONFIDENT | UNCERTAIN
+  clientRev      Int     @default(0) // monotonic client revision — stale autosave guard
   updatedAt      DateTime @updatedAt
   attempt        Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
   question       Question @relation(fields: [questionId], references: [id], onDelete: Cascade)

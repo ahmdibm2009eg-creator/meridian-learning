@@ -22,7 +22,7 @@ export function AuthView({ onAuthed }: { onAuthed: () => void }) {
   const setLocale = useApp((s) => s.setLocale);
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [busy, setBusy] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", password: "", role: "STUDENT", organizationCode: "" });
+  const [form, setForm] = useState({ name: "", email: "", password: "", organizationCode: "" });
   const [error, setError] = useState("");
 
   async function submit(e?: React.FormEvent) {
@@ -37,7 +37,6 @@ export function AuthView({ onAuthed }: { onAuthed: () => void }) {
           name: form.name,
           email: form.email,
           password: form.password,
-          role: form.role,
           organizationCode: form.organizationCode || undefined,
         });
       }
@@ -149,18 +148,6 @@ export function AuthView({ onAuthed }: { onAuthed: () => void }) {
                   <Label htmlFor="spassword" className="text-base">{t("common.password")}</Label>
                   <Input id="spassword" type="password" required minLength={8} autoComplete="new-password" className="mt-1 min-h-11 text-base"
                     value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
-                </div>
-                <div>
-                  <Label htmlFor="srole" className="text-base">{t("common.role")}</Label>
-                  <select
-                    id="srole"
-                    className="mt-1 flex min-h-11 w-full rounded-lg border border-input bg-card px-3 text-base"
-                    value={form.role}
-                    onChange={(e) => setForm({ ...form, role: e.target.value })}
-                  >
-                    <option value="STUDENT">{t("auth.student")}</option>
-                    <option value="TEACHER">{t("auth.teacher")}</option>
-                  </select>
                 </div>
                 <div>
                   <Label htmlFor="orgcode" className="text-base">

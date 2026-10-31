@@ -129,31 +129,30 @@ export function AccessibilityPanel() {
             <h3 className="mb-1 font-semibold">{t("a11y.text")}</h3>
             <div className="py-2">
               <div className="mb-1 flex items-center justify-between">
-                <Label htmlFor="fontScale" className="text-base font-medium">{t("a11y.textSize")}</Label>
-                <span className="text-sm tabular-nums text-muted-foreground">{Math.round(prefs.fontScale * 100)}%</span>
+                <span className="text-base font-medium">{t("a11y.textSize")}</span>
+                <span className="text-sm tabular-nums text-muted-foreground" aria-hidden>{Math.round(prefs.fontScale * 100)}%</span>
               </div>
               <Slider
-                id="fontScale"
+                aria-label={`${t("a11y.textSize")}: ${Math.round(prefs.fontScale * 100)}%`}
                 min={0.85} max={1.6} step={0.05}
                 value={[prefs.fontScale]}
                 onValueChange={([v]) => setPrefs({ fontScale: v })}
-                aria-valuetext={`${Math.round(prefs.fontScale * 100)}%`}
               />
               <p className="mt-1 text-xs text-muted-foreground">{t("a11y.textSizeHint")}</p>
             </div>
             <div className="py-2">
               <div className="mb-1 flex items-center justify-between">
-                <Label htmlFor="lineHeight" className="text-base font-medium">{t("a11y.lineHeight")}</Label>
-                <span className="text-sm tabular-nums text-muted-foreground">{prefs.lineHeight.toFixed(2)}</span>
+                <span className="text-base font-medium">{t("a11y.lineHeight")}</span>
+                <span className="text-sm tabular-nums text-muted-foreground" aria-hidden>{prefs.lineHeight.toFixed(2)}</span>
               </div>
-              <Slider id="lineHeight" min={1.4} max={2.2} step={0.1} value={[prefs.lineHeight]} onValueChange={([v]) => setPrefs({ lineHeight: v })} />
+              <Slider aria-label={t("a11y.lineHeight")} min={1.4} max={2.2} step={0.1} value={[prefs.lineHeight]} onValueChange={([v]) => setPrefs({ lineHeight: v })} />
             </div>
             <div className="py-2">
               <div className="mb-1 flex items-center justify-between">
-                <Label htmlFor="letterSpacing" className="text-base font-medium">{t("a11y.letterSpacing")}</Label>
-                <span className="text-sm tabular-nums text-muted-foreground">{prefs.letterSpacing.toFixed(2)}em</span>
+                <span className="text-base font-medium">{t("a11y.letterSpacing")}</span>
+                <span className="text-sm tabular-nums text-muted-foreground" aria-hidden>{prefs.letterSpacing.toFixed(2)}em</span>
               </div>
-              <Slider id="letterSpacing" min={0} max={0.12} step={0.01} value={[prefs.letterSpacing]} onValueChange={([v]) => setPrefs({ letterSpacing: v })} />
+              <Slider aria-label={t("a11y.letterSpacing")} min={0} max={0.12} step={0.01} value={[prefs.letterSpacing]} onValueChange={([v]) => setPrefs({ letterSpacing: v })} />
             </div>
             <Row label={t("a11y.font")} id="font">
               <div className="grid grid-cols-3 gap-1" role="radiogroup" aria-label={t("a11y.font")}>

@@ -1,4 +1,4 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+# See https://help.github.com/articles/ignoring-files/ for more information.
 
 # dependencies
 node_modules
@@ -12,9 +12,12 @@ node_modules
 
 # testing
 /coverage
+test-results/
+playwright-report/
 
 # next.js
 /.next/
+/.next-test/
 /out/
 
 # production
@@ -37,27 +40,35 @@ yarn-error.log*
 # vercel
 .vercel
 
-
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# logs
+*.log
+dev.log
+server.log
+
+# local tooling / sandbox-only
 local-*
 .claude
 .z-ai-config
-*.log
-dev.log
-dev.out.log
-test
-prompt
-
-server.log
-# Skills directory
 /skills/
-
-# Sandbox runtime artifacts (not part of the app)
 /upload/
 /download/
-/scripts/
 /examples/
-/tests/
 Caddyfile
+
+# databases are reproducible (migrations + seed) — never commit binaries
+db/*.db
+db/backups/
+
+# generated test/bench artifacts
+tests/server.log
+tests/bench-server.log
+tests/a11y/results.json
+docs/benchmark-results.json
+
+# platform sandbox internals
+.zscripts/
+mini-services/

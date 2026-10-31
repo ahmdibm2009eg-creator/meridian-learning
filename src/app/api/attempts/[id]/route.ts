@@ -31,7 +31,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 
     const isOwner = attempt.studentId === user.id;
     const submitted = attempt.status === "SUBMITTED" || attempt.status === "GRADED";
-    const canSeeKeys = submitted && (a.feedbackMode === "AFTER_SUBMIT" || a.feedbackMode === "AFTER_CLOSE");
+    // AFTER_CLOSE means after the assessment actually closed (status CLOSED or
+    // the availability window passed) — not merely after this student submitted.
+    const assessmentClosed =
+      a.status === "CLOSED" || (!!a.availableTo && a.availableTo < new Date());
+    const canSeeKeys =
+      submitted &&
+      (a.feedbackMode === "AFTER_SUBMIT" ||
+        (a.feedbackMode === "AFTER_CLOSE" && assessmentClosed));
 
     const passages = new Map<string, { id: string; title: string; text: string; source: string }>();
     for (const it of a.items) {
@@ -74,7 +81,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
               isCorrect: submitted ? ans?.isCorrect ?? null : undefined,
               pointsAwarded: submitted ? ans?.pointsAwarded ?? 0 : undefined,
             },
-            // Keys are only exposed after submission when feedback allows it.
+            // Keys are only exposed after submission when feedback allows it
+            // (staff reviewing another student's attempt also see keys).
             ...(canSeeKeys || !isOwner ? {
               answerKey: JSON.parse(q.answerKey || "{}"),
               explanation: q.explanation,
@@ -90,25 +98,50 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 // PATCH = autosave. Upserts answers for the current (in-progress) attempt.
+// Server-authoritative rules:
+//  - refuses writes once the attempt is submitted (409);
+//  - refuses writes past the assessment time limit (+5s network grace);
+//  - applies a per-question revision guard: a stale save (older `rev` than
+//    the stored one, e.g. from a second tab or an in-flight debounced save)
+//    is rejected for that question instead of overwriting newer answers.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   return handle(async () => {
     const { id } = await params;
     const user = await getUser();
     if (!user) return fail("Authentication required", 401);
-    const attempt = await db.attempt.findUnique({ where: { id } });
+    const attempt = await db.attempt.findUnique({
+      where: { id },
+      include: { assessment: { select: { timeLimitMin: true } } },
+    });
     if (!attempt) return fail("Attempt not found", 404);
     if (attempt.studentId !== user.id) return fail("Not your attempt", 403);
     if (attempt.status !== "IN_PROGRESS") return fail("This attempt is already submitted", 409);
+
+    if (attempt.assessment.timeLimitMin) {
+      const deadline = attempt.startedAt.getTime() + attempt.assessment.timeLimitMin * 60000 + 5000;
+      if (Date.now() > deadline) {
+        return fail("Time is up — your latest saved answers are being graded.", 409, { expired: true });
+      }
+    }
 
     const body = await req.json().catch(() => null);
     const updates = Array.isArray(body?.answers) ? body.answers : null;
     if (!updates) return fail("Expected { answers: [...] }");
 
     let saved = 0;
+    let skippedStale = 0;
     for (const u of updates) {
       if (!u || typeof u.questionId !== "string") continue;
-      await db.answer.updateMany({
-        where: { attemptId: id, questionId: u.questionId },
+      const rev =
+        typeof u.rev === "number" && Number.isFinite(u.rev) ? Math.max(0, Math.floor(u.rev)) : null;
+      const res = await db.answer.updateMany({
+        where: {
+          attemptId: id,
+          questionId: u.questionId,
+          // Stale-write guard: only apply when the incoming revision is not
+          // older than what is already stored.
+          ...(rev !== null ? { clientRev: { lte: rev } } : {}),
+        },
         data: {
           ...(u.response !== undefined ? { response: JSON.stringify(u.response ?? null) } : {}),
           ...(typeof u.flagged === "boolean" ? { flagged: u.flagged } : {}),
@@ -116,11 +149,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ...(typeof u.timeSpentSec === "number" ? { timeSpentSec: Math.max(0, Math.round(u.timeSpentSec)) } : {}),
           ...(typeof u.usedAiHelp === "boolean" ? { usedAiHelp: u.usedAiHelp } : {}),
           ...(u.selfAssessment === "CONFIDENT" || u.selfAssessment === "UNCERTAIN" ? { selfAssessment: u.selfAssessment } : {}),
+          ...(rev !== null ? { clientRev: rev } : {}),
         },
       });
-      saved++;
+      saved += res.count;
+      if (res.count === 0 && rev !== null) skippedStale++;
     }
     await db.attempt.update({ where: { id }, data: { autosavedAt: new Date() } });
-    return json({ ok: true, saved, serverTime: new Date().toISOString() });
+    return json({ ok: true, saved, skippedStale, serverTime: new Date().toISOString() });
   });
 }

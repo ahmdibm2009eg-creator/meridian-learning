@@ -6,7 +6,26 @@ import { z } from "zod";
 
 export async function GET() {
   return handle(async () => {
-    await requireCapability("org.manage");
+    const user = await requireCapability("org.manage");
+    // Tenant isolation: ORG_ADMIN sees only their own organization;
+    // creating and listing all organizations is reserved for SUPER_ADMIN.
+    if (user.role !== "SUPER_ADMIN") {
+      const org = user.organizationId
+        ? await db.organization.findUnique({
+            where: { id: user.organizationId },
+            include: { _count: { select: { users: true, courses: true, questions: true } } },
+          })
+        : null;
+      return json({
+        organizations: org
+          ? [{
+              id: org.id, name: org.name, slug: org.slug, brandingColor: org.brandingColor,
+              aiTutorEnabled: org.aiTutorEnabled, createdAt: org.createdAt,
+              users: org._count.users, courses: org._count.courses, questions: org._count.questions,
+            }]
+          : [],
+      });
+    }
     const orgs = await db.organization.findMany({
       include: { _count: { select: { users: true, courses: true, questions: true } } },
       orderBy: { createdAt: "asc" },
@@ -24,6 +43,7 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   return handle(async () => {
     const user = await requireCapability("org.manage");
+    if (user.role !== "SUPER_ADMIN") return fail("Only the platform administrator can create organizations", 403);
     const parsed = z.object({
       name: z.string().min(2).max(120),
       slug: z.string().min(2).max(40).regex(/^[a-z0-9-]+$/),

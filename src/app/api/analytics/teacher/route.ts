@@ -101,10 +101,18 @@ export async function GET(req: NextRequest) {
           where: { assessment: { courseId: c.id }, status: { in: ["SUBMITTED", "GRADED"] } },
           select: { score: true, maxScore: true, studentId: true },
         });
-        const scores = attempts.filter((t) => (t.maxScore ?? 0) > 0).map((t) => (t.score! / t.maxScore!) * 100);
+        const scoresByStudent = new Map<string, number[]>();
+        for (const t of attempts) {
+          if ((t.maxScore ?? 0) > 0) {
+            const pct = ((t.score ?? 0) / t.maxScore!) * 100;
+            scoresByStudent.set(t.studentId, [...(scoresByStudent.get(t.studentId) ?? []), pct]);
+          }
+        }
         const learners = c.enrollments.map((e) => {
           const pct = totalLessons ? (e.lessonProgress.length / totalLessons) * 100 : 0;
-          const learnerScores = scores.filter((_, i) => attempts[i].studentId === e.student.id);
+          // Per-learner averages keyed by student id (index-based filtering
+          // previously mismatched attempts with scores after the >0 filter).
+          const learnerScores = scoresByStudent.get(e.student.id) ?? [];
           return {
             id: e.student.id,
             name: e.student.name,
@@ -112,6 +120,7 @@ export async function GET(req: NextRequest) {
             avgScore: learnerScores.length ? Math.round(learnerScores.reduce((a, b) => a + b, 0) / learnerScores.length) : null,
           };
         });
+        const allScores = [...scoresByStudent.values()].flat();
         return {
           id: c.id,
           title: c.title,
@@ -120,7 +129,7 @@ export async function GET(req: NextRequest) {
           completionRate: learners.length
             ? Math.round((learners.filter((l) => l.progressPct >= 100).length / learners.length) * 100)
             : 0,
-          avgScorePct: scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null,
+          avgScorePct: allScores.length ? Math.round(allScores.reduce((a, b) => a + b, 0) / allScores.length) : null,
           assessmentCount: c.assessments.length,
           atRisk: learners.filter((l) => l.progressPct < 40 || (l.avgScore !== null && l.avgScore < 50)).length,
           roster: learners,

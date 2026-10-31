@@ -44,13 +44,18 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const lesson = await db.lesson.findUnique({ where: { id }, include: { section: { include: { course: true } } } });
     if (!lesson) return fail("Lesson not found", 404);
     const course = lesson.section.course;
+    // Tenant isolation: lessons of another organization are not editable.
+    if (user.role !== "SUPER_ADMIN" && course.organizationId !== user.organizationId) {
+      return fail("Lesson not found", 404);
+    }
     if (course.ownerId !== user.id && !["ORG_ADMIN", "SUPER_ADMIN"].includes(user.role)) {
       return fail("You do not have permission to edit this lesson", 403);
     }
     const body = await req.json().catch(() => null);
-    const data: Record<string, string> = {};
-    for (const k of ["title", "content", "type"] as const) if (typeof body?.[k] === "string") data[k] = body[k];
-    if (typeof body?.durationMin === "number") data.durationMin = String(Math.round(body.durationMin));
+    const data: Record<string, unknown> = {};
+    for (const k of ["title", "content"] as const) if (typeof body?.[k] === "string") data[k] = body[k].slice(0, k === "title" ? 200 : 100000);
+    if (typeof body?.type === "string" && ["READING", "VIDEO", "PRACTICE", "INTERACTIVE"].includes(body.type)) data.type = body.type;
+    if (typeof body?.durationMin === "number") data.durationMin = Math.min(600, Math.max(1, Math.round(body.durationMin)));
     if (Array.isArray(body?.objectives)) data.objectives = JSON.stringify(body.objectives.slice(0, 10));
     const updated = await db.lesson.update({ where: { id }, data });
     await audit(user.id, "lesson.update", "lesson", id);

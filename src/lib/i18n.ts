@@ -60,6 +60,7 @@ const en: Record<string, string> = {
   "common.filter": "Filter",
   "common.clearFilters": "Clear filters",
   "common.results": "results",
+  "common.loadMore": "Load more",
   "common.noResults": "No results found",
 
   // Auth
@@ -586,6 +587,7 @@ const ar: Record<string, string> = {
   "common.filter": "تصفية",
   "common.clearFilters": "مسح عوامل التصفية",
   "common.results": "نتيجة",
+  "common.loadMore": "عرض المزيد",
   "common.noResults": "لا توجد نتائج",
 
   "auth.signIn": "تسجيل الدخول",

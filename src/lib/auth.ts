@@ -27,6 +27,7 @@ export async function createSession(userId: string) {
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
     sameSite: "lax",
+    secure: process.env.NODE_ENV === "production", // TLS-only in production builds
     path: "/",
     expires: expiresAt,
   });
@@ -62,5 +63,8 @@ export async function getUser(): Promise<AuthUser | null> {
     include: { user: true },
   });
   if (!session || session.expiresAt < new Date() || session.user.suspended) return null;
+  // Opportunistic GC: purge this user's expired session rows so the table
+  // cannot grow without bound (reads already filter, this bounds storage).
+  db.session.deleteMany({ where: { userId: session.userId, expiresAt: { lt: new Date() } } }).catch(() => {});
   return session.user as AuthUser;
 }
